@@ -10,17 +10,20 @@ const { Server } = require("socket.io");
 const app=express();
 const port = process.env.PORT || 5000;
 // app.use(express.json({ limit: '50mb' }));
-const server = http.createServer(app);
-const io = new Server(server);
 app.use(express.urlencoded({ extended: true }));
 app.use(cors())
 app.use(express.json())
 
-
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" },
+});
   // const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.q45my.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.fqcn4.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.fqcn4.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
+const uri = "mongodb+srv://facepart:t0d9hHm80glokYIP@cluster0.4awdg7q.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -35,131 +38,20 @@ async function run() {
   try{
       await client.connect();
       console.log("connected to database");
-      const database = client.db('Overseas');
+      const database = client.db('faceArt');
       const homeProjectCollection = database.collection('HomeProject');     
       const userCollection = database.collection('users');
-      const cashcategoryCollection = database.collection('cashcategory');
-      const chatsCollection = database.collection('chats');
+      const parcelbookCollection = database.collection('parcelboking');
       
 
-    // Fetch chat history
- // Fetch chat history
-
-  app.get("/api/chats", async (req, res) => {
-  const { productId, userEmail } = req.query;
-
-  try {
-    const messages = await chatsCollection
-      .find({
-        productId,
-        $or: [
-          { senderEmail: userEmail },
-          { receiverEmail: userEmail },
-        ],
-      })
-      .sort({ timestamp: 1 })
-      .toArray();
-
-    res.json(messages);
-  } catch (error) {
-    console.error("Error fetching messages:", error);
-    res.status(500).json({ error: "Failed to fetch messages" });
-  }
-});
-
-
-
-// Save a message
-app.post("/api/chats", async (req, res) => {
-  const { productId, senderEmail, receiverEmail, message,productimage,productmodel } = req.body;
-
-  if (!productId || !senderEmail || !receiverEmail || !message) {
-    return res.status(400).json({ error: "Incomplete message data." });
-  }
-
-  try {
-    const chat = {
-      productId,
-      senderEmail,
-      receiverEmail,
-      message,
-      timestamp: new Date(),
-      productimage,
-      productmodel
-    };
-
-    // Save the chat message to the database
-    const result = await chatsCollection.insertOne(chat);
-
-    // Return the saved message with its ID
-    res.status(201).json({ ...chat, _id: result.insertedId });
-  } catch (error) {
-    console.error("Error saving chat:", error);
-    res.status(500).json({ error: "Failed to save chat message." });
-  }
-});
+   
 
 
 
 
+     
 
-// Socket.IO for real-time messaging
-io.on("connection", (socket) => {
-  console.log("New client connected");
-
-  socket.on("sendMessage", async (chat) => {
-    const { productId, senderEmail, receiverEmail, message } = chat;
-
-    try {
-      if (!productId || !senderEmail || !receiverEmail || !message) {
-        throw new Error("Incomplete message data.");
-      }
-
-      const newChat = {
-        productId,
-        senderEmail,
-        receiverEmail,
-        message,
-        timestamp: new Date(),
-      };
-
-      // Save the chat message to the database
-      const result = await chatsCollection.insertOne(newChat);
-
-      const savedMessage = { ...newChat, _id: result.insertedId };
-
-      // Emit the message to both participants
-      io.to(senderEmail).emit("receiveMessage", savedMessage);
-      io.to(receiverEmail).emit("receiveMessage", savedMessage);
-    } catch (error) {
-      console.error("Error processing message:", error);
-    }
-  });
-});
-
-
-
-
-
-
-
-
-      app.post("/api/form-submit", async (req, res) => {
-        console.log(req.body)
-        try {
-          
-          const result = await cashcategoryCollection.insertOne(req.body);
-          res.status(200).json({ message: "Data submitted successfully!", result });
-        } catch (error) {
-          console.error("Error saving data:", error);
-          res.status(500).json({ message: "Failed to submit data" });
-        } 
-      });
-
-      app.get("/getcategoryparts", async (req, res) => {
-        const result = await cashcategoryCollection.find({}).toArray();
-        res.json(result);
-      });
+     
 
  // add database user collection 
  app.post('/users', async(req,res)=>{
@@ -251,14 +143,300 @@ app.get('/users/:email', async (req, res) => {
 
 
 
+// parcel booking 
+app.post("/api/bookings", async (req, res) => {
+      const booking = req.body;
+      console.log(" Received booking:", booking);
+
+      if (
+        !booking.pickupAddress ||
+        !booking.deliveryAddress ||
+        !booking.parcelType ||
+        !booking.paymentMode ||
+        !booking.createdAt 
+      ) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      const result = await parcelbookCollection.insertOne(booking);
+      res.status(201).json({ message: "Booking created", id: result.insertedId });
+    });
+
+
+    app.get("/api/bookings", async (req, res) => {
+  const bookings = await parcelbookCollection
+    .find()
+    .sort({ _id: -1 })
+    .toArray();
+
+  res.json(bookings);
+});
+
+app.get("/api/deliveryagents", async (req, res) => {
+  const agents = await userCollection
+    .find({ role: "delivery" })
+    .toArray();
+  res.json(agents);
+});
+
+
+ app.post("/api/parcelbooking/:id/assign", async (req, res) => {
+  const parcelId = req.params.id;
+  const { deliveryAgentId } = req.body;
+
+  if (!deliveryAgentId) {
+    return res.status(400).json({ message: "deliveryAgentId is required" });
+  }
+
+  const agent = await userCollection
+    .findOne({ _id: new ObjectId(deliveryAgentId) });
+
+  if (!agent) {
+    return res.status(404).json({ message: "Delivery agent not found" });
+  }
+
+  const result = await parcelbookCollection
+    .updateOne(
+      { _id: new ObjectId(parcelId) },
+      {
+        $set: {
+          deliveryAgentId: agent._id,
+          deliveryAgentName: agent.displayName,
+        },
+      }
+    );
+
+  res.json({ message: "Agent assigned", modifiedCount: result.modifiedCount });
+});
+
+
+app.get("/api/parcelbooking/agent/:name", async (req, res) => {
+      const agentName = req.params.name;
+
+      const parcels = await parcelbookCollection
+        .find({ deliveryAgentName: agentName })
+        .sort({ _id: -1 })
+        .toArray();
+
+      res.json(parcels);
+    });
+
+
+  app.get("/api/parcels/customer/:customer", async (req, res) => {
+  console.log("Customer param:", req.params.customer);
+  const parcels = await parcelbookCollection
+    .find({ customer: req.params.customer })
+    .toArray();
+  console.log("Found parcels:", parcels);
+  res.json(parcels);
+});
+
+app.get("/api/parcels", async (req, res) => {
+    const customerName = req.query.customerName;
+    const result = await parcelbookCollection.find({ customer: customerName }).toArray();
+    res.json(result);
+  });
+
+  // Socket.IO: driver sends live location
+  io.on("connection", (socket) => {
+    console.log("Driver or customer connected");
+
+    socket.on("driverLocation", ({ parcelId, lat, lng }) => {
+      // broadcast to all customers tracking this parcel
+      io.emit(`parcel-${parcelId}`, { lat, lng });
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Socket disconnected");
+    });
+  });
 
 
 
+app.post("/api/parcelbooking/:id/status", async (req, res) => {
+  const parcelId = req.params.id;
+  const { status } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ message: "status is required" });
+  }
+
+  const result = await parcelbookCollection
+    .updateOne(
+      { _id: new ObjectId(parcelId) },
+      { $set: { status } }
+    );
+
+  res.json({ message: "Status updated", modifiedCount: result.modifiedCount });
+});
+
+
+  
+app.get("/api/admin/dashboard-metrics", async (req, res) => {
+
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const dateRegex = new RegExp(`^${todayStr}`);
+
+  // Total counts
+  const totalBookingsCount = await parcelbookCollection.countDocuments({});
+  const totalFailedCount = await parcelbookCollection.countDocuments({ status: "Failed" });
+  const totalCODCount = await parcelbookCollection.countDocuments({
+    paymentMode: { $regex: /^cod$/i }
+  });
+
+  // Today counts
+  const todayBookingsCount = await parcelbookCollection.countDocuments({
+    createdAt: { $regex: dateRegex }
+  });
+
+  const todayFailedCount = await parcelbookCollection.countDocuments({
+    status: "Failed",
+    createdAt: { $regex: dateRegex }
+  });
+
+  const todayCODCount = await parcelbookCollection.countDocuments({
+    paymentMode: { $regex: /^cod$/i },
+    createdAt: { $regex: dateRegex }
+  });
+
+  res.json({
+    totalBookingsCount,
+    totalFailedCount,
+    totalCODCount,
+    todayBookingsCount,
+    todayFailedCount,
+    todayCODCount,
+  });
+});
+
+
+app.get("/api/admin/all-parcels", async (req, res) => {
+
+  const parcels = await parcelbookCollection
+    .find({})
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  res.json(parcels);
+});
+
+
+app.get("/api/admin/bookings-by-date", async (req, res) => {
+
+  const result = await parcelbookCollection.aggregate([
+    {
+      $addFields: {
+        dateOnly: {
+          $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$createdAt" } }
+        }
+      }
+    },
+    {
+      $group: {
+        _id: "$dateOnly",
+        totalBookings: { $sum: 1 },
+        failedDeliveries: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "Failed"] }, 1, 0]
+          }
+        },
+        codParcels: {
+          $sum: {
+            $cond: [
+              { $regexMatch: { input: "$paymentMode", regex: /^cod$/i } },
+              1,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      $sort: { _id: -1 } // newest date first
+    }
+  ]).toArray();
+
+  res.json(result);
+});
 
 
 
+app.get("/api/admin/parcels-by-date", async (req, res) => {
+  
+  const { date, filter } = req.query; // date = 'YYYY-MM-DD', filter = 'total' | 'failed' | 'cod'
+
+  if (!date) {
+    return res.status(400).json({ error: "Missing date query parameter" });
+  }
+
+  const query = {
+    createdAt: { $regex: `^${date}` },
+  };
+
+  if (filter === "failed") {
+    query.status = "Failed";
+  } else if (filter === "cod") {
+    query.paymentMode = { $regex: /^cod$/i };
+  }
+  // if filter is 'total' or not provided, no extra filters
+
+  const parcels = await parcelbookCollection
+    .find(query)
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  res.json(parcels);
+});
 
 
+// View all users
+app.get("/api/admin/users", async (req, res) => {
+  const users = await userCollection.find({}).sort({ displayName: 1 }).toArray();
+  res.json(users);
+});
+
+// View all bookings
+app.get("/api/admin/bookings", async (req, res) => {
+  const bookings = await parcelbookCollection.find({}).sort({ createdAt: -1 }).toArray();
+  res.json(bookings);
+});
+
+app.get('/userRole/:email', async (req, res) => {
+  const email = req.params.email;
+  console.log(email)
+
+  try {
+    const user = await userCollection.findOne({ email });
+    console.log(user)
+    if (user && user.role) {
+      res.send({ role: user.role });
+    } else {
+      res.status(404).send({ message: 'Role not found for this email' });
+    }
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+
+ app.get('/userLogins/:email', async (req, res) => {
+      const email = req.params.email;
+      const user = await userCollection.findOne({ email });
+
+      if (user) {
+        res.send({
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+          admin: user.role === 'admin',
+        });
+      } else {
+        res.status(404).send({ message: 'User not found' });
+      }
+    });
 
 
 
@@ -355,7 +533,7 @@ app.get('/users/:email', async (req, res) => {
 run().catch(console.dir)
 
    app.get('/', (req,res)=>{
-    res.send("online shopping");
+    res.send("courier service");
    });
   
  app.listen(port, ()=>{
